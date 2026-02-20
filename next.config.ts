@@ -1,11 +1,2 @@
-// next.config.ts
-
-/** @type {import('next').NextConfig} */
-const nextConfig = {
-  reactStrictMode: true,
-  experimental: {
-    appDir: true,
-  },
-};
-
-module.exports = nextConfig;
+// This file is intentionally left empty.
+// Configuration is in next.config.mjs

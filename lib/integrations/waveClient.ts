@@ -6,14 +6,11 @@ export interface WavePaymentResult {
 
 export async function pushToWave(
   phone: string,
-  amount: number,
+  _amount: number,
   reference: string
 ): Promise<WavePaymentResult> {
   const failRate = parseFloat(process.env.WAVE_FAIL_RATE ?? '0.1');
   const rand = Math.random();
-
-  void phone;
-  void amount;
 
   if (rand < failRate) {
     return {

@@ -1,0 +1,95 @@
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  password  String
+  role      String   @default("VIEWER")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Beneficiary {
+  id        String    @id @default(cuid())
+  name      String
+  phone     String    @unique
+  address   String?
+  status    String    @default("ACTIVE")
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  payments  Payment[]
+}
+
+model BudgetLine {
+  id           String    @id @default(cuid())
+  name         String
+  totalAmount  Float
+  usedAmount   Float     @default(0)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  payments     Payment[]
+}
+
+model Payment {
+  id             String      @id @default(cuid())
+  beneficiaryId  String
+  budgetLineId   String
+  amount         Float
+  status         String      @default("PENDING")
+  reference      String      @unique @default(cuid())
+  bulkJobId      String?
+  telecomRef     String?
+  reconciledAt   DateTime?
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+  beneficiary    Beneficiary @relation(fields: [beneficiaryId], references: [id])
+  budgetLine     BudgetLine  @relation(fields: [budgetLineId], references: [id])
+  wavePushes     WavePush[]
+}
+
+model BulkJob {
+  id          String   @id @default(cuid())
+  status      String   @default("PENDING")
+  total       Int      @default(0)
+  processed   Int      @default(0)
+  succeeded   Int      @default(0)
+  failed      Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Alert {
+  id          String   @id @default(cuid())
+  type        String
+  message     String
+  paymentId   String?
+  resolved    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  action    String
+  entity    String
+  entityId  String?
+  userId    String?
+  details   String?
+  createdAt DateTime @default(now())
+}
+
+model WavePush {
+  id        String   @id @default(cuid())
+  paymentId String
+  status    String
+  waveRef   String?
+  createdAt DateTime @default(now())
+  payment   Payment  @relation(fields: [paymentId], references: [id])
+}

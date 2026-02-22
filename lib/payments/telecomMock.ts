@@ -10,8 +10,8 @@ export async function sendPaymentToTelecom(
   _phone: string,
   _amount: number
 ): Promise<TelecomResponse> {
-  const failRate = parseFloat(process.env.TELECOM_FAIL_RATE ?? '0.1');
-  const delayRate = parseFloat(process.env.TELECOM_DELAY_RATE ?? '0.1');
+  const failRate = parseFloat(process.env.TELECOM_FAIL_RATE ?? '10') / 100;
+  const delayRate = parseFloat(process.env.TELECOM_DELAY_RATE ?? '10') / 100;
   const rand = Math.random();
   const reference = `TEL-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 

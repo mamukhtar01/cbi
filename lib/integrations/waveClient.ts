@@ -9,7 +9,7 @@ export async function pushToWave(
   _amount: number,
   reference: string
 ): Promise<WavePaymentResult> {
-  const failRate = parseFloat(process.env.WAVE_FAIL_RATE ?? '0.1');
+  const failRate = parseFloat(process.env.WAVE_FAIL_RATE ?? '10') / 100;
   const rand = Math.random();
 
   if (rand < failRate) {

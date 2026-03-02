@@ -17,7 +17,7 @@ export async function POST(request: Request) {
 
     const sql = getSQL()
     const body = await request.json()
-    const { file_name, payments } = body as { file_name: string; payments: PaymentRow[] }
+    const { file_name, payments, budget_line_id } = body as { file_name: string; payments: PaymentRow[]; budget_line_id?: string }
 
     if (!file_name || !payments || payments.length === 0) {
       return NextResponse.json({ error: "File name and payments data required" }, { status: 400 })
@@ -76,8 +76,8 @@ export async function POST(request: Request) {
 
     // Create the batch (starts in pending_approval – must be approved before processing)
     const batch = await sql`
-      INSERT INTO upload_batches (file_name, total_recipients, total_amount, status)
-      VALUES (${file_name}, ${validPayments.length}, ${totalAmount}, 'pending_approval')
+      INSERT INTO upload_batches (file_name, total_recipients, total_amount, status, budget_line_id)
+      VALUES (${file_name}, ${validPayments.length}, ${totalAmount}, 'pending_approval', ${budget_line_id ?? null})
       RETURNING *
     `
 

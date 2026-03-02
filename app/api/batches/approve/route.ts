@@ -51,7 +51,6 @@ export async function POST(request: Request) {
       await sql`
         UPDATE upload_batches
         SET status = 'approved',
-            approved_by = ${session.username},
             approved_at = NOW(),
             payment_provider = ${payment_provider}
         WHERE id = ${batch_id}
@@ -67,7 +66,6 @@ export async function POST(request: Request) {
       await sql`
         UPDATE upload_batches
         SET status = 'rejected',
-            approved_by = ${session.username},
             approved_at = NOW()
         WHERE id = ${batch_id}
       `

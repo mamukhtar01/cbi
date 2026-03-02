@@ -135,6 +135,7 @@ export default function UploadPage() {
       const validRows = parsedData.filter((r) => r.valid)
       const res = await fetch("/api/upload", {
         method: "POST",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           file_name: fileName,
@@ -178,6 +179,7 @@ export default function UploadPage() {
     try {
       const res = await fetch("/api/batches/approve", {
         method: "POST",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           batch_id: uploadResult.batch_id,
@@ -205,6 +207,7 @@ export default function UploadPage() {
     try {
       const res = await fetch("/api/batches/approve", {
         method: "POST",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           batch_id: uploadResult.batch_id,
@@ -232,6 +235,7 @@ export default function UploadPage() {
     try {
       const res = await fetch("/api/payments/process", {
         method: "POST",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ batch_id: batchId }),
       })

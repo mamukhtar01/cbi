@@ -74,10 +74,10 @@ export async function POST(request: Request) {
 
     const totalAmount = validPayments.reduce((sum, p) => sum + p.amount, 0)
 
-    // Create the batch
+    // Create the batch (starts in pending_approval – must be approved before processing)
     const batch = await sql`
       INSERT INTO upload_batches (file_name, total_recipients, total_amount, status)
-      VALUES (${file_name}, ${validPayments.length}, ${totalAmount}, 'pending')
+      VALUES (${file_name}, ${validPayments.length}, ${totalAmount}, 'pending_approval')
       RETURNING *
     `
 

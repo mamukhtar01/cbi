@@ -11,6 +11,13 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import {
   Table,
   TableBody,
   TableCell,
@@ -19,10 +26,16 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { Skeleton } from "@/components/ui/skeleton"
-import { ArrowLeft, RotateCcw, Download, Loader2, CheckCircle2, XCircle, Clock } from "lucide-react"
+import { ArrowLeft, RotateCcw, Download, Loader2, CheckCircle2, XCircle, Clock, ShieldCheck, ShieldX } from "lucide-react"
 import { useState } from "react"
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json())
+
+const PROVIDER_LABELS: Record<string, string> = {
+  mock: "Mock (Test)",
+  mtn_momo: "MTN MoMo",
+  mpesa: "M-Pesa",
+}
 
 export default function BatchDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
@@ -30,6 +43,78 @@ export default function BatchDetailPage({ params }: { params: Promise<{ id: stri
     refreshInterval: 5000,
   })
   const [retrying, setRetrying] = useState(false)
+  const [approving, setApproving] = useState(false)
+  const [selectedProvider, setSelectedProvider] = useState("mock")
+
+  async function handleApprove() {
+    if (!selectedProvider) {
+      toast.error("Please select a payment provider before approving")
+      return
+    }
+    setApproving(true)
+    try {
+      const res = await fetch("/api/batches/approve", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ batch_id: id, approve: true, payment_provider: selectedProvider }),
+      })
+      const result = await res.json()
+      if (res.ok) {
+        toast.success(`Batch approved with provider: ${PROVIDER_LABELS[selectedProvider] || selectedProvider}`)
+        mutate()
+      } else {
+        toast.error(result.error || "Approval failed")
+      }
+    } catch {
+      toast.error("Network error during approval")
+    } finally {
+      setApproving(false)
+    }
+  }
+
+  async function handleReject() {
+    setApproving(true)
+    try {
+      const res = await fetch("/api/batches/approve", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ batch_id: id, approve: false }),
+      })
+      const result = await res.json()
+      if (res.ok) {
+        toast.success("Batch rejected")
+        mutate()
+      } else {
+        toast.error(result.error || "Rejection failed")
+      }
+    } catch {
+      toast.error("Network error during rejection")
+    } finally {
+      setApproving(false)
+    }
+  }
+
+  async function handleProcess() {
+    setRetrying(true)
+    try {
+      const res = await fetch("/api/payments/process", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ batch_id: id }),
+      })
+      const result = await res.json()
+      if (res.ok) {
+        toast.success(`Processing started: ${result.successful} successful, ${result.failed} failed`)
+        mutate()
+      } else {
+        toast.error(result.error || "Processing failed")
+      }
+    } catch {
+      toast.error("Network error during processing")
+    } finally {
+      setRetrying(false)
+    }
+  }
 
   async function handleRetryAll() {
     setRetrying(true)
@@ -94,6 +179,11 @@ export default function BatchDetailPage({ params }: { params: Promise<{ id: stri
   const { batch, payments, status_counts: counts } = data
   const totalPayments = payments.length
   const progressPercent = totalPayments > 0 ? ((counts.success + counts.failed) / totalPayments) * 100 : 0
+  const isPendingApproval = batch.status === "pending_approval"
+  const isApproved = batch.status === "approved"
+  const isRejected = batch.status === "rejected"
+  const canProcess = isApproved
+  const canRetry = ["approved", "processing", "partial", "completed"].includes(batch.status) && counts.failed > 0
 
   return (
     <div className="flex flex-col gap-6">
@@ -117,10 +207,16 @@ export default function BatchDetailPage({ params }: { params: Promise<{ id: stri
           </div>
         </div>
         <div className="flex gap-2">
-          {counts.failed > 0 && (
+          {canRetry && (
             <Button variant="outline" onClick={handleRetryAll} disabled={retrying} className="gap-2">
               {retrying ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
               Retry Failed ({counts.failed})
+            </Button>
+          )}
+          {canProcess && (
+            <Button onClick={handleProcess} disabled={retrying} className="gap-2">
+              {retrying ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
+              Process Payments
             </Button>
           )}
           <Button variant="outline" onClick={handleExport} className="gap-2">
@@ -129,6 +225,89 @@ export default function BatchDetailPage({ params }: { params: Promise<{ id: stri
           </Button>
         </div>
       </div>
+
+      {/* Approval panel */}
+      {isPendingApproval && (
+        <Card className="border-warning/50 bg-warning/5">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Clock className="h-4 w-4 text-warning" />
+              Approval Required
+            </CardTitle>
+            <CardDescription>
+              This batch is awaiting approval. Select a payment provider and approve or reject below.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-4">
+            <div className="flex flex-col gap-2">
+              <label className="text-sm font-medium text-foreground">Payment Provider</label>
+              <Select value={selectedProvider} onValueChange={setSelectedProvider}>
+                <SelectTrigger className="w-full sm:w-64">
+                  <SelectValue placeholder="Select provider" />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.entries(PROVIDER_LABELS).map(([value, label]) => (
+                    <SelectItem key={value} value={value}>
+                      {label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex gap-3">
+              <Button
+                variant="destructive"
+                onClick={handleReject}
+                disabled={approving}
+                className="gap-2"
+              >
+                {approving ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldX className="h-4 w-4" />}
+                Reject
+              </Button>
+              <Button
+                onClick={handleApprove}
+                disabled={approving || !selectedProvider}
+                className="gap-2"
+              >
+                {approving ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
+                Approve
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Approval info (when approved or rejected) */}
+      {(isApproved || isRejected) && batch.approved_by && (
+        <Card className={isApproved ? "border-success/30 bg-success/5" : "border-destructive/30 bg-destructive/5"}>
+          <CardContent className="pt-4 pb-4">
+            <div className="flex flex-wrap gap-4 text-sm">
+              <div>
+                <span className="text-muted-foreground">
+                  {isApproved ? "Approved by:" : "Rejected by:"}
+                </span>{" "}
+                <span className="font-medium text-foreground">{batch.approved_by}</span>
+              </div>
+              {batch.approved_at && (
+                <div>
+                  <span className="text-muted-foreground">At:</span>{" "}
+                  <span className="font-medium text-foreground">
+                    {format(new Date(batch.approved_at), "MMM d, yyyy 'at' HH:mm")}
+                  </span>
+                </div>
+              )}
+              {isApproved && batch.payment_provider && (
+                <div>
+                  <span className="text-muted-foreground">Provider:</span>{" "}
+                  <span className="font-medium text-foreground">
+                    {PROVIDER_LABELS[batch.payment_provider] || batch.payment_provider}
+                  </span>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Summary cards */}
       <div className="grid gap-4 sm:grid-cols-4">
@@ -222,6 +401,7 @@ export default function BatchDetailPage({ params }: { params: Promise<{ id: stri
                   <TableHead>Phone Number</TableHead>
                   <TableHead className="text-right">Amount</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead>Provider</TableHead>
                   <TableHead>Transaction ID</TableHead>
                   <TableHead>Error</TableHead>
                   <TableHead>Processed At</TableHead>
@@ -239,6 +419,9 @@ export default function BatchDetailPage({ params }: { params: Promise<{ id: stri
                     </TableCell>
                     <TableCell>
                       <PaymentStatusBadge status={payment.status as string} />
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {PROVIDER_LABELS[payment.payment_provider as string] || (payment.payment_provider as string) || "-"}
                     </TableCell>
                     <TableCell className="font-mono text-xs text-muted-foreground max-w-32 truncate">
                       {(payment.transaction_id as string) || "-"}

@@ -9,6 +9,13 @@ import { DataPreviewTable, type PaymentRow } from "@/components/data-preview-tab
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -18,9 +25,15 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { Loader2, Send, AlertTriangle, CheckCircle2, XCircle } from "lucide-react"
+import { Loader2, Send, AlertTriangle, CheckCircle2, XCircle, ShieldCheck, Clock } from "lucide-react"
 
-type Step = "upload" | "preview" | "processing" | "complete"
+type Step = "upload" | "preview" | "awaiting_approval" | "processing" | "complete"
+
+const PROVIDER_LABELS: Record<string, string> = {
+  mock: "Mock (Test)",
+  mtn_momo: "MTN MoMo",
+  mpesa: "M-Pesa",
+}
 
 interface UploadResult {
   batch_id: string
@@ -47,6 +60,7 @@ export default function UploadPage() {
   const [processResult, setProcessResult] = useState<ProcessResult | null>(null)
   const [loading, setLoading] = useState(false)
   const [showConfirm, setShowConfirm] = useState(false)
+  const [selectedProvider, setSelectedProvider] = useState("mock")
 
   const handleFileSelected = useCallback((file: File) => {
     setFileName(file.name)
@@ -140,12 +154,12 @@ export default function UploadPage() {
 
       setUploadResult(data)
 
-      // Show warning if there are duplicates
       if (data.recent_successful_payments.length > 0 || data.duplicates_in_file.length > 0) {
         setShowConfirm(true)
       } else {
-        // Auto-process if no warnings
-        await processPayments(data.batch_id)
+        // Move to awaiting approval step instead of auto-processing
+        setStep("awaiting_approval")
+        toast.success("Batch uploaded successfully. Select a provider and approve to continue.")
       }
     } catch {
       toast.error("Network error during upload")
@@ -153,6 +167,63 @@ export default function UploadPage() {
       setLoading(false)
     }
   }, [parsedData, fileName])
+
+  const handleApprove = useCallback(async () => {
+    if (!uploadResult) return
+    if (!selectedProvider) {
+      toast.error("Please select a payment provider before approving")
+      return
+    }
+    setLoading(true)
+    try {
+      const res = await fetch("/api/batches/approve", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          batch_id: uploadResult.batch_id,
+          approve: true,
+          payment_provider: selectedProvider,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        toast.error(data.error || "Approval failed")
+        return
+      }
+      toast.success("Batch approved. Starting payment processing...")
+      await processPayments(uploadResult.batch_id)
+    } catch {
+      toast.error("Network error during approval")
+    } finally {
+      setLoading(false)
+    }
+  }, [uploadResult, selectedProvider])
+
+  const handleReject = useCallback(async () => {
+    if (!uploadResult) return
+    setLoading(true)
+    try {
+      const res = await fetch("/api/batches/approve", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          batch_id: uploadResult.batch_id,
+          approve: false,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        toast.error(data.error || "Rejection failed")
+        return
+      }
+      toast.success("Batch rejected.")
+      router.push(`/dashboard/batches/${uploadResult.batch_id}`)
+    } catch {
+      toast.error("Network error during rejection")
+    } finally {
+      setLoading(false)
+    }
+  }, [uploadResult, router])
 
   const processPayments = useCallback(async (batchId: string) => {
     setStep("processing")
@@ -168,7 +239,7 @@ export default function UploadPage() {
       const data = await res.json()
       if (!res.ok) {
         toast.error(data.error || "Processing failed")
-        setStep("preview")
+        setStep("awaiting_approval")
         return
       }
 
@@ -182,7 +253,7 @@ export default function UploadPage() {
       }
     } catch {
       toast.error("Network error during processing")
-      setStep("preview")
+      setStep("awaiting_approval")
     } finally {
       setLoading(false)
     }
@@ -191,9 +262,10 @@ export default function UploadPage() {
   const handleConfirmProcess = useCallback(() => {
     setShowConfirm(false)
     if (uploadResult) {
-      processPayments(uploadResult.batch_id)
+      setStep("awaiting_approval")
+      toast.success("Batch uploaded successfully. Select a provider and approve to continue.")
     }
-  }, [uploadResult, processPayments])
+  }, [uploadResult])
 
   const handleReset = useCallback(() => {
     setStep("upload")
@@ -201,7 +273,11 @@ export default function UploadPage() {
     setParsedData([])
     setUploadResult(null)
     setProcessResult(null)
+    setSelectedProvider("mock")
   }, [])
+
+  const stepLabels = ["Upload File", "Preview Data", "Awaiting Approval", "Processing", "Complete"]
+  const stepKeys: Step[] = ["upload", "preview", "awaiting_approval", "processing", "complete"]
 
   return (
     <div className="flex flex-col gap-6">
@@ -213,10 +289,9 @@ export default function UploadPage() {
       </div>
 
       {/* Step indicators */}
-      <div className="flex items-center gap-2">
-        {["Upload File", "Preview Data", "Processing", "Complete"].map((label, idx) => {
-          const stepMap: Step[] = ["upload", "preview", "processing", "complete"]
-          const currentIdx = stepMap.indexOf(step)
+      <div className="flex items-center gap-2 flex-wrap">
+        {stepLabels.map((label, idx) => {
+          const currentIdx = stepKeys.indexOf(step)
           const isActive = idx === currentIdx
           const isDone = idx < currentIdx
 
@@ -295,7 +370,7 @@ export default function UploadPage() {
               <div>
                 <CardTitle>Data Preview</CardTitle>
                 <CardDescription>
-                  Review the parsed data before processing payments
+                  Review the parsed data before submitting for approval
                 </CardDescription>
               </div>
               <div className="flex gap-2">
@@ -315,7 +390,7 @@ export default function UploadPage() {
                   ) : (
                     <>
                       <Send className="h-4 w-4" />
-                      Process Payments
+                      Submit for Approval
                     </>
                   )}
                 </Button>
@@ -331,6 +406,92 @@ export default function UploadPage() {
         </Card>
       )}
 
+      {/* Step: Awaiting Approval */}
+      {step === "awaiting_approval" && uploadResult && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Clock className="h-5 w-5 text-warning" />
+              Awaiting Approval
+            </CardTitle>
+            <CardDescription>
+              Review the batch summary, select a payment provider, then approve or reject.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-6">
+            {/* Batch summary */}
+            <div className="rounded-lg border bg-muted/30 p-4 grid grid-cols-2 gap-3 text-sm">
+              <div>
+                <p className="text-muted-foreground">File</p>
+                <p className="font-medium text-foreground">{fileName}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Recipients</p>
+                <p className="font-medium text-foreground">{uploadResult.total_recipients}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Total Amount</p>
+                <p className="font-medium text-foreground">
+                  {uploadResult.total_amount.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                </p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Batch ID</p>
+                <p className="font-mono text-xs text-foreground">{uploadResult.batch_id}</p>
+              </div>
+            </div>
+
+            {/* Provider selection */}
+            <div className="flex flex-col gap-2">
+              <label className="text-sm font-medium text-foreground">Payment Provider</label>
+              <Select value={selectedProvider} onValueChange={setSelectedProvider}>
+                <SelectTrigger className="w-full sm:w-64">
+                  <SelectValue placeholder="Select provider" />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.entries(PROVIDER_LABELS).map(([value, label]) => (
+                    <SelectItem key={value} value={value}>
+                      {label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                MTN MoMo and M-Pesa are stubs — they will return &ldquo;provider not configured&rdquo; until real integration is added.
+              </p>
+            </div>
+
+            {/* Actions */}
+            <div className="flex gap-3">
+              <Button variant="outline" onClick={handleReset} disabled={loading}>
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={handleReject}
+                disabled={loading}
+                className="gap-2"
+              >
+                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <XCircle className="h-4 w-4" />}
+                Reject
+              </Button>
+              <Button
+                onClick={handleApprove}
+                disabled={loading || !selectedProvider}
+                className="gap-2"
+              >
+                {loading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <ShieldCheck className="h-4 w-4" />
+                )}
+                Approve & Process
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Step: Processing */}
       {step === "processing" && (
         <Card>
@@ -339,7 +500,7 @@ export default function UploadPage() {
             <div className="text-center">
               <h3 className="text-lg font-semibold text-foreground">Processing Payments</h3>
               <p className="mt-1 text-sm text-muted-foreground">
-                Sending money to {parsedData.filter((r) => r.valid).length} recipients via mobile money...
+                Sending money to {parsedData.filter((r) => r.valid).length} recipients via {PROVIDER_LABELS[selectedProvider] || selectedProvider}...
               </p>
               <p className="mt-2 text-xs text-muted-foreground">
                 This may take a few minutes. Please do not close this page.
@@ -433,7 +594,7 @@ export default function UploadPage() {
                     </ul>
                   </div>
                 )}
-                <p>Do you want to proceed with processing anyway?</p>
+                <p>Do you want to proceed to the approval step anyway?</p>
               </div>
             </AlertDialogDescription>
           </AlertDialogHeader>

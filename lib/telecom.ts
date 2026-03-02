@@ -10,11 +10,12 @@ export interface PaymentResponse {
   message: string
 }
 
+export type PaymentProvider = "mock" | "mtn_momo" | "mpesa"
+
 /**
- * Send mobile money payment via telecom API.
- * Currently uses mock API; swap this function body for real M-Pesa/MTN MoMo integration.
+ * Send mobile money payment via the mock telecom API.
  */
-export async function sendMobilePayment(request: PaymentRequest): Promise<PaymentResponse> {
+async function sendMockPayment(request: PaymentRequest): Promise<PaymentResponse> {
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"
   const res = await fetch(`${baseUrl}/api/mock/telecom`, {
     method: "POST",
@@ -31,4 +32,52 @@ export async function sendMobilePayment(request: PaymentRequest): Promise<Paymen
   }
 
   return res.json()
+}
+
+/**
+ * MTN Mobile Money stub – real integration not yet configured.
+ */
+async function sendMtnMomoPayment(_request: PaymentRequest): Promise<PaymentResponse> {
+  return {
+    success: false,
+    transaction_id: null,
+    message: "provider not configured: mtn_momo",
+  }
+}
+
+/**
+ * M-Pesa stub – real integration not yet configured.
+ */
+async function sendMpesaPayment(_request: PaymentRequest): Promise<PaymentResponse> {
+  return {
+    success: false,
+    transaction_id: null,
+    message: "provider not configured: mpesa",
+  }
+}
+
+/**
+ * Dispatch a payment to the selected provider.
+ * Use sendPayment(provider, request) instead of the old sendMobilePayment().
+ */
+export async function sendPayment(
+  provider: PaymentProvider | string,
+  request: PaymentRequest,
+): Promise<PaymentResponse> {
+  switch (provider) {
+    case "mtn_momo":
+      return sendMtnMomoPayment(request)
+    case "mpesa":
+      return sendMpesaPayment(request)
+    case "mock":
+    default:
+      return sendMockPayment(request)
+  }
+}
+
+/**
+ * @deprecated Use sendPayment(provider, request) instead.
+ */
+export async function sendMobilePayment(request: PaymentRequest): Promise<PaymentResponse> {
+  return sendMockPayment(request)
 }

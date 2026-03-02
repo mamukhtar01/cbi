@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback } from "react"
+import { useState, useCallback, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import * as XLSX from "xlsx"
 import { toast } from "sonner"
@@ -26,6 +26,14 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { Loader2, Send, AlertTriangle, CheckCircle2, XCircle, ShieldCheck, Clock } from "lucide-react"
+
+interface BudgetLine {
+  id: string
+  budget_line_code: string
+  amount: number
+  project_name: string
+  approver: string
+}
 
 type Step = "upload" | "preview" | "awaiting_approval" | "processing" | "complete"
 
@@ -61,6 +69,19 @@ export default function UploadPage() {
   const [loading, setLoading] = useState(false)
   const [showConfirm, setShowConfirm] = useState(false)
   const [selectedProvider, setSelectedProvider] = useState("mock")
+  const [budgetLines, setBudgetLines] = useState<BudgetLine[]>([])
+  const [selectedBudgetLineId, setSelectedBudgetLineId] = useState("")
+  const [showBudgetAlert, setShowBudgetAlert] = useState(false)
+
+  // Load budget lines on mount
+  useEffect(() => {
+    fetch("/api/budget-lines", { credentials: "include" })
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.budget_lines) setBudgetLines(d.budget_lines)
+      })
+      .catch(() => {/* non-critical */})
+  }, [])
 
   const handleFileSelected = useCallback((file: File) => {
     setFileName(file.name)
@@ -130,15 +151,29 @@ export default function UploadPage() {
   }, [])
 
   const handleUploadAndValidate = useCallback(async () => {
+    // Budget line check
+    if (!selectedBudgetLineId) {
+      toast.error("Please select a budget line before submitting")
+      return
+    }
+    const chosenBudget = budgetLines.find((b) => b.id === selectedBudgetLineId)
+    const validRows = parsedData.filter((r) => r.valid)
+    const totalAmount = validRows.reduce((sum, r) => sum + r.amount, 0)
+
+    if (chosenBudget && totalAmount > Number(chosenBudget.amount)) {
+      setShowBudgetAlert(true)
+      return
+    }
+
     setLoading(true)
     try {
-      const validRows = parsedData.filter((r) => r.valid)
       const res = await fetch("/api/upload", {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           file_name: fileName,
+          budget_line_id: selectedBudgetLineId,
           payments: validRows.map((r) => ({
             recipient_name: r.recipient_name,
             phone_number: r.phone_number,
@@ -167,7 +202,7 @@ export default function UploadPage() {
     } finally {
       setLoading(false)
     }
-  }, [parsedData, fileName])
+  }, [parsedData, fileName, selectedBudgetLineId, budgetLines])
 
   const handleApprove = useCallback(async () => {
     if (!uploadResult) return
@@ -278,6 +313,7 @@ export default function UploadPage() {
     setUploadResult(null)
     setProcessResult(null)
     setSelectedProvider("mock")
+    setSelectedBudgetLineId("")
   }, [])
 
   const stepLabels = ["Upload File", "Preview Data", "Awaiting Approval", "Processing", "Complete"]
@@ -401,7 +437,48 @@ export default function UploadPage() {
               </div>
             </div>
           </CardHeader>
-          <CardContent>
+          <CardContent className="flex flex-col gap-4">
+            {/* Budget line selection */}
+            <div className="rounded-lg border bg-muted/30 p-4 flex flex-col gap-3 sm:flex-row sm:items-end">
+              <div className="flex flex-col gap-1.5 flex-1">
+                <label className="text-sm font-medium text-foreground">Budget Line</label>
+                <Select value={selectedBudgetLineId} onValueChange={setSelectedBudgetLineId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a budget line..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {budgetLines.map((bl) => (
+                      <SelectItem key={bl.id} value={bl.id}>
+                        {bl.budget_line_code} — {bl.project_name} (
+                        {Number(bl.amount).toLocaleString("en-US", { minimumFractionDigits: 2 })})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {budgetLines.length === 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    No budget lines configured.{" "}
+                    <a href="/dashboard/budget-lines" className="underline text-primary">
+                      Add one first.
+                    </a>
+                  </p>
+                )}
+              </div>
+              {selectedBudgetLineId && (() => {
+                const bl = budgetLines.find((b) => b.id === selectedBudgetLineId)
+                const total = parsedData.filter((r) => r.valid).reduce((s, r) => s + r.amount, 0)
+                const over = bl ? total > Number(bl.amount) : false
+                return bl ? (
+                  <div className={`rounded-lg px-4 py-2 text-sm font-medium ${over ? "bg-destructive/10 text-destructive" : "bg-success/10 text-success"}`}>
+                    {over ? (
+                      <span>⚠ Total ({total.toLocaleString("en-US", { minimumFractionDigits: 2 })}) exceeds budget ({Number(bl.amount).toLocaleString("en-US", { minimumFractionDigits: 2 })})</span>
+                    ) : (
+                      <span>✓ Within budget ({Number(bl.amount).toLocaleString("en-US", { minimumFractionDigits: 2 })})</span>
+                    )}
+                  </div>
+                ) : null
+              })()}
+            </div>
             <DataPreviewTable
               data={parsedData}
               recentPhones={uploadResult?.recent_successful_payments || []}
@@ -443,6 +520,17 @@ export default function UploadPage() {
                 <p className="text-muted-foreground">Batch ID</p>
                 <p className="font-mono text-xs text-foreground">{uploadResult.batch_id}</p>
               </div>
+              {selectedBudgetLineId && (() => {
+                const bl = budgetLines.find((b) => b.id === selectedBudgetLineId)
+                return bl ? (
+                  <div className="col-span-2">
+                    <p className="text-muted-foreground">Budget Line</p>
+                    <p className="font-medium text-foreground">
+                      {bl.budget_line_code} — {bl.project_name} (Approver: {bl.approver})
+                    </p>
+                  </div>
+                ) : null
+              })()}
             </div>
 
             {/* Provider selection */}
@@ -563,6 +651,48 @@ export default function UploadPage() {
           </CardContent>
         </Card>
       )}
+
+      {/* Budget exceeded alert */}
+      <AlertDialog open={showBudgetAlert} onOpenChange={setShowBudgetAlert}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-destructive" />
+              Budget Exceeded
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="flex flex-col gap-2">
+                {(() => {
+                  const bl = budgetLines.find((b) => b.id === selectedBudgetLineId)
+                  const total = parsedData.filter((r) => r.valid).reduce((s, r) => s + r.amount, 0)
+                  return bl ? (
+                    <>
+                      <p>
+                        The total payment amount of{" "}
+                        <span className="font-medium text-foreground">
+                          {total.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                        </span>{" "}
+                        exceeds the budget line{" "}
+                        <span className="font-mono font-medium text-foreground">{bl.budget_line_code}</span>{" "}
+                        limit of{" "}
+                        <span className="font-medium text-foreground">
+                          {Number(bl.amount).toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                        </span>.
+                      </p>
+                      <p>Please select a different budget line or reduce the payment amounts before proceeding.</p>
+                    </>
+                  ) : null
+                })()}
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogAction onClick={() => setShowBudgetAlert(false)}>
+              OK
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Duplicate warning dialog */}
       <AlertDialog open={showConfirm} onOpenChange={setShowConfirm}>

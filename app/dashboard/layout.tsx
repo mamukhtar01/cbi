@@ -2,12 +2,13 @@
 
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
-import { Banknote, LayoutDashboard, Upload, FileText, BarChart3, LogOut } from "lucide-react"
+import { Banknote, LayoutDashboard, Upload, FileText, BarChart3, LogOut, BookMarked } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/dashboard/upload", label: "Upload & Pay", icon: Upload },
+  { href: "/dashboard/budget-lines", label: "Budget Lines", icon: BookMarked },
   { href: "/dashboard/reports", label: "Reports", icon: BarChart3 },
 ]
 

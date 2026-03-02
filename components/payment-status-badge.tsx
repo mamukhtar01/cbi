@@ -1,5 +1,5 @@
 import { Badge } from "@/components/ui/badge"
-import { CheckCircle2, XCircle, Clock, Loader2 } from "lucide-react"
+import { CheckCircle2, XCircle, Clock, Loader2, ShieldCheck, ShieldX } from "lucide-react"
 
 const statusConfig = {
   success: {
@@ -16,6 +16,21 @@ const statusConfig = {
     label: "Pending",
     className: "bg-warning/15 text-warning-foreground border-warning/30",
     icon: Clock,
+  },
+  pending_approval: {
+    label: "Awaiting Approval",
+    className: "bg-warning/15 text-warning-foreground border-warning/30",
+    icon: Clock,
+  },
+  approved: {
+    label: "Approved",
+    className: "bg-success/15 text-success border-success/30",
+    icon: ShieldCheck,
+  },
+  rejected: {
+    label: "Rejected",
+    className: "bg-destructive/15 text-destructive border-destructive/30",
+    icon: ShieldX,
   },
   processing: {
     label: "Processing",

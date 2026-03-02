@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { getSession } from "@/lib/auth"
 import { sql as getSQL } from "@/lib/db"
-import { sendMobilePayment } from "@/lib/telecom"
+import { sendPayment } from "@/lib/telecom"
 
 export async function POST(request: Request) {
   try {
@@ -21,6 +21,18 @@ export async function POST(request: Request) {
     if (batches.length === 0) {
       return NextResponse.json({ error: "Batch not found" }, { status: 404 })
     }
+
+    const batch = batches[0]
+
+    // Gate: batch must be approved before processing
+    if (batch.status !== "approved") {
+      return NextResponse.json(
+        { error: `Batch must be approved before processing. Current status: '${batch.status}'` },
+        { status: 409 },
+      )
+    }
+
+    const provider = (batch.payment_provider as string) || "mock"
 
     // Update batch status
     await sql`UPDATE upload_batches SET status = 'processing' WHERE id = ${batch_id}`
@@ -42,9 +54,9 @@ export async function POST(request: Request) {
 
     for (const payment of payments) {
       // Update to processing
-      await sql`UPDATE payments SET status = 'processing' WHERE id = ${payment.id}`
+      await sql`UPDATE payments SET status = 'processing', payment_provider = ${provider} WHERE id = ${payment.id}`
 
-      const result = await sendMobilePayment({
+      const result = await sendPayment(provider, {
         phone_number: payment.phone_number as string,
         amount: payment.amount as number,
         reference: payment.id as string,

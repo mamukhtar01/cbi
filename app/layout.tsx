@@ -8,7 +8,7 @@ const _geist = Geist({ subsets: ["latin"] });
 const _geistMono = Geist_Mono({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: 'BulkPay - Mobile Money Disbursement',
+  title: 'CBI - Mobile Money Disbursement',
   description: 'Upload Excel files and send bulk mobile money payments with real-time tracking and reporting.',
   icons: {
     icon: [

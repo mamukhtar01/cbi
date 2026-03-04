@@ -12,12 +12,21 @@ export interface PaymentResponse {
 
 export type PaymentProvider = "mock" | "mtn_momo" | "mpesa"
 
-/**
- * Send mobile money payment via the mock telecom API.
- */
-async function sendMockPayment(request: PaymentRequest): Promise<PaymentResponse> {
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"
-  const res = await fetch(`${baseUrl}/api/mock/telecom`, {
+function getBaseUrl(): string {
+  return (
+    process.env.NEXT_PUBLIC_APP_URL ||
+    process.env.APP_URL ||
+    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null) ||
+    "http://localhost:3000"
+  )
+}
+
+async function callMockEndpoint(
+  endpoint: string,
+  request: PaymentRequest,
+): Promise<PaymentResponse> {
+  const baseUrl = getBaseUrl().replace(/\/$/, "")
+  const res = await fetch(`${baseUrl}${endpoint}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(request),
@@ -35,6 +44,13 @@ async function sendMockPayment(request: PaymentRequest): Promise<PaymentResponse
 }
 
 /**
+ * Send mobile money payment via the default mock telecom endpoint.
+ */
+async function sendMockPayment(request: PaymentRequest): Promise<PaymentResponse> {
+  return callMockEndpoint("/api/mock/telecom", request)
+}
+
+/**
  * MTN Mobile Money stub – real integration not yet configured.
  */
 async function sendMtnMomoPayment(_request: PaymentRequest): Promise<PaymentResponse> {
@@ -48,12 +64,8 @@ async function sendMtnMomoPayment(_request: PaymentRequest): Promise<PaymentResp
 /**
  * M-Pesa stub – real integration not yet configured.
  */
-async function sendMpesaPayment(_request: PaymentRequest): Promise<PaymentResponse> {
-  return {
-    success: false,
-    transaction_id: null,
-    message: "provider not configured: mpesa",
-  }
+async function sendMpesaPayment(request: PaymentRequest): Promise<PaymentResponse> {
+  return callMockEndpoint("/api/mock/mpesa", request)
 }
 
 /**

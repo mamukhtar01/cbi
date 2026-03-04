@@ -125,7 +125,7 @@ export default function BudgetLinesPage() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">Budget Lines</h1>
+        <h1 className="text-2xl font-bold tracking-tight text-foreground">WBL - Budget Lines</h1>
         <p className="text-sm text-muted-foreground mt-1">
           Manage budget lines for payment authorization. Each batch upload must be assigned a budget line.
         </p>
@@ -140,7 +140,7 @@ export default function BudgetLinesPage() {
         <CardContent>
           <form onSubmit={handleAdd} className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="bl-code">Budget Line Code</Label>
+              <Label htmlFor="bl-code">WBL Code</Label>
               <Input
                 id="bl-code"
                 placeholder="e.g. BL-2024-001"
